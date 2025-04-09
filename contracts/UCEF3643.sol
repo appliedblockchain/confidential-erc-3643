@@ -2,6 +2,7 @@
 
 pragma solidity ^0.8.17;
 
+// This imported contract is modified here (patches/@tokenysolutions__t-rex@4.1.6.patch) to add "virtual" modifier to selected methods enabling contract extension
 import {Token} from "@tokenysolutions/t-rex/contracts/token/Token.sol";
 import {IIdentityRegistry} from "@tokenysolutions/t-rex/contracts/registry/interface/IIdentityRegistry.sol";
 
