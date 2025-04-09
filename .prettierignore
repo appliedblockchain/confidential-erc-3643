@@ -1,0 +1,14 @@
+# Build outputs
+dist/
+build/
+
+# Dependencies
+node_modules/
+
+# Hardhat specific
+artifacts/
+cache/
+typechain-types/
+
+# Generated files
+*.generated.* 

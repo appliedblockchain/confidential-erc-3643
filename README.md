@@ -1,46 +1,178 @@
-# **Unopinionated Confidential ERC-20 Framework (UCEF)**
+# Confidential ERC-3643 Token (UCEF3643)
 
-**Introduction**
+This guide provides comprehensive instructions for testing and deploying the Confidential ERC-3643 (UCEF3643) token implementation.
 
-The rapid growth of decentralised finance highlights a critical tension between transparency and privacy. ERC-20 tokens expose user balances and transaction amounts, which can deter mainstream adoption and compromise sensitive financial data. Numerous proposals for confidential ERC-20 tokens have emerged, all of which are firmly tied to a particular cryptographic approach be it TEE, FHE, MPC, or zero-knowledge proofs. This creates issues for interoperability of confidential tokens in addition this approach ties a contract developer to a specific cryptographic implementation.
+## UCEF Integration with ERC-3643
 
-**An unopinionated implementation**
+This implementation combines the privacy-preserving features of UCEF (Unopinionated Confidential ERC-20 Framework) with the compliance and identity verification capabilities of ERC-3643. While ERC-3643 provides robust regulatory compliance through identity verification and transfer restrictions, UCEF adds a layer of programmable confidentiality to protect sensitive financial data.
 
-To achieve a truly unopinionated implementation, cryptographic details should be abstracted away from the Solidity interface. This ensures that different cryptographic approaches can be swapped without altering the contract’s external behaviour. Furthermore, logic around permissions and visibility controls should be programmable using standard Solidity constructs, avoiding proprietary libraries or custom extensions. The UCEF approach preserves the ERC-20 standard’s simplicity and composability while enabling flexible privacy rules that can adapt to evolving security requirements and compliance needs.
+Key benefits of this integration:
+- **Programmable Privacy**: Leverages UCEF's unopinionated approach to implement confidential balances and transactions while maintaining ERC-3643's compliance features
+- **Regulatory Compliance**: Preserves all ERC-3643 compliance mechanisms including identity verification and transfer restrictions
+- **Flexible Implementation**: Maintains cryptographic agnosticism while enforcing privacy using standard Solidity constructs
+- **Enhanced Security**: Combines identity-based access controls with confidential transaction capabilities
 
-## ***Features***
+This hybrid approach ensures that regulated entities can benefit from privacy-preserving features while maintaining full compliance with regulatory requirements.
 
-- The same ERC-20 interface
-- No custom libraries
-- Flexible implementation expressible in solidity
+## Contract Features
 
-The UCEF implementation enforces privacy using standard Solidity authorisation checks, as demonstrated in the balanceOf function shown below, which requires the caller to be the account owner. This eliminates the need for custom libraries or cryptographic proofs, preserving compatibility with existing ERC-20 interfaces and maintaining gas efficiency. By leveraging native Solidity constructs, this approach simplifies auditing, enhances composability with decentralised applications, and keeps cryptographic complexity outside the smart contract. This minimalistic design ensures adaptability and maintainability while allowing developers to focus on enforcing data access rules through their preferred cryptographic technologies.
+The UCEF3643 token implementation includes:
+- ERC-3643 compliance
+- UCEF privacy
+- Identity verification
+- Compliance checks
+- Token freezing capabilities
+- Transfer restrictions
+- Agent management
+  
+## Prerequisites
 
-```solidity
-    function balanceOf(address account) public view override returns (uint256) {
-        require(msg.sender == account, "Unauthorized access to balance");
-        return _balances[account];
-    }
+- Node.js (v14 or higher)
+- pnpm (recommended)
+- Hardhat
+- Access to Silent Data credentials (for Silent Data deployment)
+
+## Project Structure
+
+The token implementation is located in the `contracts/ucef-3643.sol` file. The root directory includes:
+- Test fixtures
+- Deployment script (scripts/deploy-suite.ts)
+- Ignition module (ignition/modules/UCEF3643.ts)
+
+## Testing
+
+### Running Tests
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd confidential-erc-3643
 ```
 
-**Event Modification**
+2. Install dependencies:
+```bash
+pnpm install
+```
 
-The UCEF implementation modifies the Transfer and Approval events to hide the account and value parameters. This allows for the implementation of fully anonymous accounts. This modification is optional and can be overridden by the developer, an example of the openzeppelin implementation modified to hide the from, to and value parameters is available at [contracts/token/UCEF.sol](contracts/token/UCEF.sol).
+3. Compile contracts:
+```bash
+pnpm compile
+```
+
+4. Run all tests:
+```bash
+pnpm test
+```
+
+## Deployment
+
+### Local Development
+
+1. Start local Hardhat node:
+```bash
+pnpm chain
+```
+
+2. Configure environment:
+Create a `.env` file in the root directory:
+```env
+PRIVATE_KEY=<deployer_private_key>
+```
+
+3. Deploy using Ignition:
+```bash
+pnpm deploy:module UCEF3643
+```
+
+### Silent Data Deployment
+
+1. Configure environment:
+Create a `.env` file with Silent Data credentials:
+```env
+PRIVATE_KEY=<deployer_private_key>
+RPC_URL=<silent_data_rpc_url>
+CHAIN_ID=<silent_data_chain_id>
+```
+
+2. Deploy to Silent Data:
+```bash
+pnpm deploy:module UCEF3643 silentdata
+```
+
+### Available Modules
+| Module Name | Description |
+|------------|-------------|
+| UCEF3643 | Basic UCEF3643 token deployment without initialization |
+| UCEF3643Init | UCEF3643 token deployment with mock registry/compliance and initialization |
+| UCEF3643Proxy | UCEF3643 token deployment with proxy pattern for upgradability |
 
 
-## **Examples**
-A range of examples are available at: [contracts/examples/](contracts/examples/)
+### Deployment Script
 
-## **Comparison with existing implementations**
+The deployment script (`scripts/deploy-suite.ts`) deploys the complete T-REX suite including:
+- ClaimTopicsRegistry
+- TrustedIssuersRegistry
+- IdentityRegistryStorage
+- IdentityRegistry
+- ModularCompliance
+- TREXImplementationAuthority
+- Token implementation (UCEF3643)
 
-|                                | **UCEF by Applied Blockchain** | **fhEVM ERC-20 by Zama** | **Confidential ERC-20 Framework using FHE by Inco & Circle** | **COTI Private ERC-20** |
-|--------------------------------|--------------------------------|--------------------------|------------------------------------------------------------|-------------------------|
-| **Confidential Balances**      | ✅                              | ✅                        | ✅                                                          | ✅                       |
-| **Fully Anonymous Accounts**   | ✅                              | ❌                        | ❌                                                          | ❌                       |
-| **Programmable Confidentiality** | ✅                              | 🟠 Partial Support        | 🟠 Partial Support                                          | ❌                       |
-| **Unmodified ERC-20 Interface** | ✅                              | ❌                        | ❌                                                          | ❌                       |
-| **Cryptography Agnostic**      | ✅                              | ❌                        | ❌                                                          | ❌                       |
+To use the deployment script:
+```bash
+pnpm script deploy-suite
+```
 
-## **Adopted By**
-<a href="https://silentdata.com/"><img src="https://github.com/user-attachments/assets/36ea4772-23c8-4c7a-ad2e-e3d6ee40ef9a" alt="Light Silent Data Logo" width="300"/></a>
+To use the deployment script with Silent Data network:
+```bash
+pnpm script deploy-suite silentdata
+```
 
+The script will output the deployment addresses to the a file `DeploymentOutput.json` in the `out` directory. It's possible to export the private keys of the accounts by prepending the `EXPORT_PRIVATE_KEYS` environment variable set to `true`.
+
+```bash
+EXPORT_PRIVATE_KEYS=true pnpm script deploy-suite
+```
+
+## Troubleshooting
+
+If you encounter issues:
+
+1. Clean build artifacts:
+```bash
+pnpm clean
+```
+
+2. Recompile contracts:
+```bash
+pnpm compile
+```
+
+3. Verify environment configuration
+4. Check network connectivity
+5. Ensure sufficient funds for deployment
+
+
+## Important Notes
+
+- Always test thoroughly on local network before deployment
+- Keep private keys and API credentials secure
+- Back up deployment addresses and transaction hashes
+- Monitor gas prices for optimal deployment timing
+- Ensure all required contracts are properly deployed in the correct order
+
+## Development Workflow
+
+1. Make changes to contracts
+2. Run tests to verify changes
+3. Deploy to local network for testing
+4. Deploy to testnet if required
+5. Deploy to production network
+
+## Security Considerations
+
+- Verify all contract interactions
+- Implement proper access controls
+- Test all security-critical functions
+- Review compliance requirements
+- Monitor for potential vulnerabilities

@@ -1,0 +1,67 @@
+diff --git a/contracts/token/Token.sol b/contracts/token/Token.sol
+index 4ea309184be4b34cd92c6cf4c983e8b084c320c2..752209ead4f71c7e0045a4dd92e9f22792c70efa 100755
+--- a/contracts/token/Token.sol
++++ b/contracts/token/Token.sol
+@@ -221,7 +221,7 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
+         address _from,
+         address _to,
+         uint256 _amount
+-    ) external override whenNotPaused returns (bool) {
++    ) external virtual whenNotPaused returns (bool) {
+         require(!_frozen[_to] && !_frozen[_from], "wallet is frozen");
+         require(_amount <= balanceOf(_from) - (_frozenTokens[_from]), "Insufficient Balance");
+         if (_tokenIdentityRegistry.isVerified(_to) && _tokenCompliance.canTransfer(_from, _to, _amount)) {
+@@ -414,7 +414,7 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
+      *  @param _amount The number of tokens to transfer
+      *  @return `true` if successful and revert if unsuccessful
+      */
+-    function transfer(address _to, uint256 _amount) public override whenNotPaused returns (bool) {
++    function transfer(address _to, uint256 _amount) public virtual whenNotPaused returns (bool) {
+         require(!_frozen[_to] && !_frozen[msg.sender], "wallet is frozen");
+         require(_amount <= balanceOf(msg.sender) - (_frozenTokens[msg.sender]), "Insufficient Balance");
+         if (_tokenIdentityRegistry.isVerified(_to) && _tokenCompliance.canTransfer(msg.sender, _to, _amount)) {
+@@ -432,7 +432,7 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
+         address _from,
+         address _to,
+         uint256 _amount
+-    ) public override onlyAgent returns (bool) {
++    ) public virtual onlyAgent returns (bool) {
+         require(balanceOf(_from) >= _amount, "sender balance too low");
+         uint256 freeBalance = balanceOf(_from) - (_frozenTokens[_from]);
+         if (_amount > freeBalance) {
+@@ -461,7 +461,7 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
+     /**
+      *  @dev See {IToken-burn}.
+      */
+-    function burn(address _userAddress, uint256 _amount) public override onlyAgent {
++    function burn(address _userAddress, uint256 _amount) public virtual onlyAgent {
+         require(balanceOf(_userAddress) >= _amount, "cannot burn more than balance");
+         uint256 freeBalance = balanceOf(_userAddress) - _frozenTokens[_userAddress];
+         if (_amount > freeBalance) {
+@@ -485,7 +485,7 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
+     /**
+      *  @dev See {IToken-freezePartialTokens}.
+      */
+-    function freezePartialTokens(address _userAddress, uint256 _amount) public override onlyAgent {
++    function freezePartialTokens(address _userAddress, uint256 _amount) public virtual onlyAgent {
+         uint256 balance = balanceOf(_userAddress);
+         require(balance >= _frozenTokens[_userAddress] + _amount, "Amount exceeds available balance");
+         _frozenTokens[_userAddress] = _frozenTokens[_userAddress] + (_amount);
+@@ -495,7 +495,7 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
+     /**
+      *  @dev See {IToken-unfreezePartialTokens}.
+      */
+-    function unfreezePartialTokens(address _userAddress, uint256 _amount) public override onlyAgent {
++    function unfreezePartialTokens(address _userAddress, uint256 _amount) public virtual onlyAgent {
+         require(_frozenTokens[_userAddress] >= _amount, "Amount should be less than or equal to frozen tokens");
+         _frozenTokens[_userAddress] = _frozenTokens[_userAddress] - (_amount);
+         emit TokensUnfrozen(_userAddress, _amount);
+@@ -524,7 +524,7 @@ contract Token is IToken, AgentRoleUpgradeable, TokenStorage {
+     /**
+      *  @dev See {IERC20-balanceOf}.
+      */
+-    function balanceOf(address _userAddress) public view override returns (uint256) {
++    function balanceOf(address _userAddress) public view virtual returns (uint256) {
+         return _balances[_userAddress];
+     }
+ 
