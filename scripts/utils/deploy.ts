@@ -64,3 +64,21 @@ export function createRandomWallet() {
 
   return wallet
 }
+
+export function createWallet(privateKey: string) {
+  let wallet = new ethers.Wallet(privateKey)
+  if (network.name === 'silentdata') {
+    const url = (network.config as any).url as string
+    const provider = new SilentDataRollupProvider({
+      rpcUrl: url,
+      network: NetworkName.TESTNET,
+      chainId: network.config.chainId,
+      privateKey: wallet.privateKey,
+    })
+    wallet = wallet.connect(provider as any)
+  } else {
+    wallet = wallet.connect(ethers.provider)
+  }
+
+  return wallet
+}

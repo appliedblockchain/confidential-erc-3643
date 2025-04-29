@@ -1,6 +1,7 @@
 import { ethers } from 'hardhat'
 import pc from 'picocolors'
 import { ImportedSuite, deployIdentityProxy, waitTx, ExtendedAccounts } from '../utils'
+import { fundAccount } from '../utils/fund'
 
 export async function deployIdentities(data: ImportedSuite) {
   console.log(pc.green('Deploying identities and claims...'))
@@ -21,6 +22,8 @@ export async function deployIdentities(data: ImportedSuite) {
     await aliceWallet.getAddress(),
     deployer,
   )
+
+  await fundAccount(await aliceWallet.getAddress())
 
   await waitTx(
     await aliceIdentity
@@ -46,6 +49,7 @@ export async function deployIdentities(data: ImportedSuite) {
   await waitTx(await identityRegistry.connect(deployer).addAgent(await token.getAddress()))
 
   console.log(pc.yellow('11/15 Batch Registering Identities...'))
+  await fundAccount(await tokenAgent.getAddress())
   await waitTx(
     await identityRegistry
       .connect(tokenAgent)
@@ -109,6 +113,7 @@ export async function deployIdentities(data: ImportedSuite) {
     ),
   )
 
+  await fundAccount(await bobWallet.getAddress())
   await waitTx(
     await bobIdentity
       .connect(bobWallet)
