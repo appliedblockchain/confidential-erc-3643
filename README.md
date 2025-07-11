@@ -176,3 +176,7 @@ pnpm compile
 - Test all security-critical functions
 - Review compliance requirements
 - Monitor for potential vulnerabilities
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
