@@ -253,17 +253,18 @@ describe('UCEF3643', function () {
 
     it('Should fail if sender is transferring frozen tokens', async function () {
       expect(await token.connect(agent).freezePartialTokens(addr1Address, ethers.parseEther('1000')))
-        // Should emit TokensFrozen event with zero amount
-        .to.emit(token, 'TokensFrozen')
-        .withArgs(addr1Address, 0n)
+        // Should emit PrivateEvent with TokensFrozen event type
+        .to.emit(token, 'PrivateEvent')
+        .withArgs([addr1Address], token.EVENT_TYPE_TOKENS_FROZEN(), ethers.AbiCoder.defaultAbiCoder().encode(['address', 'uint256'], [addr1Address, ethers.parseEther('1000')]))
       await expect(token.connect(addr1).transfer(addr2Address, ethers.parseEther('100'))).to.be.revertedWith(
         'Insufficient Balance',
       )
 
       // Unfreeze tokens
       await expect(token.connect(agent).unfreezePartialTokens(addr1Address, ethers.parseEther('1000')))
-        .to.emit(token, 'TokensUnfrozen')
-        .withArgs(addr1Address, 0)
+        // Should emit PrivateEvent with TokensUnfrozen event type
+        .to.emit(token, 'PrivateEvent')
+        .withArgs([addr1Address], token.EVENT_TYPE_TOKENS_UNFROZEN(), ethers.AbiCoder.defaultAbiCoder().encode(['address', 'uint256'], [addr1Address, ethers.parseEther('1000')]))
       await token.connect(addr1).transfer(addr2Address, ethers.parseEther('100'))
       expect(await token.connect(addr2).balanceOf(addr2Address)).to.equal(ethers.parseEther('100'))
     })
@@ -352,9 +353,9 @@ describe('UCEF3643', function () {
       await mockIdentityRegistry.setVerified(addr2Address, true)
       await token.connect(agent).freezePartialTokens(addr1Address, ethers.parseEther('500'))
       await expect(token.connect(agent).forcedTransfer(addr1Address, addr2Address, ethers.parseEther('600')))
-        // Should emit TokensUnfrozen event with zero amount
-        .to.emit(token, 'TokensUnfrozen')
-        .withArgs(addr1Address, 0)
+        // Should emit PrivateEvent with TokensUnfrozen event type
+        .to.emit(token, 'PrivateEvent')
+        .withArgs([addr1Address], token.EVENT_TYPE_TOKENS_UNFROZEN(), ethers.AbiCoder.defaultAbiCoder().encode(['address', 'uint256'], [addr1Address, ethers.parseEther('100')]))
       expect(await token.connect(addr2).balanceOf(addr2Address)).to.equal(ethers.parseEther('600'))
     })
 
@@ -502,8 +503,9 @@ describe('UCEF3643', function () {
 
       it('Should emit Approval event when setting allowance', async function () {
         await expect(token.connect(addr1).approve(addr2Address, ALLOWANCE_AMOUNT))
-          .to.emit(token, 'Approval')
-          .withArgs(ethers.ZeroAddress, ethers.ZeroAddress, 0n)
+          // Should emit PrivateEvent with Approval event type
+          .to.emit(token, 'PrivateEvent')
+          .withArgs([addr1Address, addr2Address], token.EVENT_TYPE_APPROVAL(), ethers.AbiCoder.defaultAbiCoder().encode(['address', 'address', 'uint256'], [addr1Address, addr2Address, ALLOWANCE_AMOUNT]))
       })
 
       it('Should not allow setting allowance for zero address spender', async function () {
