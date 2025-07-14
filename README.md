@@ -7,6 +7,7 @@ This guide provides comprehensive instructions for testing and deploying the Con
 This implementation combines the privacy-preserving features of UCEF (Unopinionated Confidential ERC-20 Framework) with the compliance and identity verification capabilities of ERC-3643. While ERC-3643 provides robust regulatory compliance through identity verification and transfer restrictions, UCEF adds a layer of programmable confidentiality to protect sensitive financial data.
 
 Key benefits of this integration:
+
 - **Programmable Privacy**: Leverages UCEF's unopinionated approach to implement confidential balances and transactions while maintaining ERC-3643's compliance features
 - **Regulatory Compliance**: Preserves all ERC-3643 compliance mechanisms including identity verification and transfer restrictions
 - **Flexible Implementation**: Maintains cryptographic agnosticism while enforcing privacy using standard Solidity constructs
@@ -17,6 +18,7 @@ This hybrid approach ensures that regulated entities can benefit from privacy-pr
 ## Contract Features
 
 The UCEF3643 token implementation includes:
+
 - ERC-3643 compliance
 - UCEF privacy
 - Identity verification
@@ -24,7 +26,53 @@ The UCEF3643 token implementation includes:
 - Token freezing capabilities
 - Transfer restrictions
 - Agent management
-  
+
+## Private Events System
+
+The UCEF3643 token implements a privacy-preserving event system that replaces standard ERC-20 events with private events that only authorized addresses can view.
+
+### How Private Events Work
+
+Instead of emitting standard events like `Transfer` or `Approval`, the contract emits `PrivateEvent` with:
+
+- **allowedViewers**: Array of addresses authorized to view the event
+- **eventType**: Hash of the original event signature (e.g., `Transfer(address,address,uint256)`)
+- **payload**: ABI-encoded event arguments
+
+### Event Types Supported
+
+- `EVENT_TYPE_TRANSFER`: Private transfer events
+- `EVENT_TYPE_APPROVAL`: Private approval events  
+- `EVENT_TYPE_TOKENS_FROZEN`: Private token freezing events
+- `EVENT_TYPE_TOKENS_UNFROZEN`: Private token unfreezing events
+
+### Authorized Viewers
+
+Private events are only visible to:
+
+- **Affected addresses**: The `from` and `to` addresses in transfers
+- **Auditor**: The designated auditor address (if set)
+- **Event participants**: Owners and spenders in approval events
+
+### Auditor Role
+
+The contract includes an auditor role that can be set by agents:
+
+```solidity
+function setAuditor(address _auditor) external onlyAgent
+```
+
+The auditor receives access to all private events for compliance and monitoring purposes.
+
+### Privacy Benefits
+
+- **Confidential transfers**: Transfer amounts and participants are only visible to involved parties
+- **Private approvals**: Allowance changes are only visible to owner and spender
+- **Regulatory compliance**: Auditors can monitor activity while maintaining user privacy
+- **Selective disclosure**: Events are only visible to authorized viewers
+
+This approach maintains full ERC-3643 compliance while adding programmable privacy through the private events system.
+
 ## Prerequisites
 
 - Node.js (v14 or higher)
@@ -35,6 +83,7 @@ The UCEF3643 token implementation includes:
 ## Project Structure
 
 The token implementation is located in the `contracts/ucef-3643.sol` file. The root directory includes:
+
 - Test fixtures
 - Deployment script (scripts/deploy-suite.ts)
 - Ignition module (ignition/modules/UCEF3643.ts)
@@ -44,72 +93,84 @@ The token implementation is located in the `contracts/ucef-3643.sol` file. The r
 ### Running Tests
 
 1. Clone the repository:
-```bash
-git clone <repository-url>
-cd confidential-erc-3643
-```
+
+    ```bash
+    git clone <repository-url>
+    cd confidential-erc-3643
+    ```
 
 2. Install dependencies:
-```bash
-pnpm install
-```
+
+    ```bash
+    pnpm install
+    ```
 
 3. Compile contracts:
-```bash
-pnpm compile
-```
+
+    ```bash
+    pnpm compile
+    ```
 
 4. Run all tests:
-```bash
-pnpm test
-```
+
+    ```bash
+    pnpm test
+    ```
 
 ## Deployment
 
 ### Local Development
 
 1. Start local Hardhat node:
-```bash
-pnpm chain
-```
+
+    ```bash
+    pnpm chain
+    ```
 
 2. Configure environment:
-Create a `.env` file in the root directory:
-```env
-PRIVATE_KEY=<deployer_private_key>
-```
+
+    Create a `.env` file in the root directory:
+
+    ```env
+    PRIVATE_KEY=<deployer_private_key>
+    ```
 
 3. Deploy using Ignition:
-```bash
-pnpm deploy:module UCEF3643
-```
+
+    ```bash
+    pnpm deploy:module UCEF3643
+    ```
 
 ### Silent Data Deployment
 
 1. Configure environment:
-Create a `.env` file with Silent Data credentials:
-```env
-PRIVATE_KEY=<deployer_private_key>
-RPC_URL=<silent_data_rpc_url>
-CHAIN_ID=<silent_data_chain_id>
-```
+
+    Create a `.env` file with Silent Data credentials:
+
+    ```env
+    PRIVATE_KEY=<deployer_private_key>
+    RPC_URL=<silent_data_rpc_url>
+    CHAIN_ID=<silent_data_chain_id>
+    ```
 
 2. Deploy to Silent Data:
-```bash
-pnpm deploy:module UCEF3643 silentdata
-```
+
+    ```bash
+    pnpm deploy:module UCEF3643 silentdata
+    ```
 
 ### Available Modules
+
 | Module Name | Description |
 |------------|-------------|
 | UCEF3643 | Basic UCEF3643 token deployment without initialization |
 | UCEF3643Init | UCEF3643 token deployment with mock registry/compliance and initialization |
 | UCEF3643Proxy | UCEF3643 token deployment with proxy pattern for upgradability |
 
-
 ### Deployment Script
 
 The deployment script (`scripts/deploy-suite.ts`) deploys the complete T-REX suite including:
+
 - ClaimTopicsRegistry
 - TrustedIssuersRegistry
 - IdentityRegistryStorage
@@ -119,11 +180,13 @@ The deployment script (`scripts/deploy-suite.ts`) deploys the complete T-REX sui
 - Token implementation (UCEF3643)
 
 To use the deployment script:
+
 ```bash
 pnpm script deploy-suite
 ```
 
 To use the deployment script with Silent Data network:
+
 ```bash
 pnpm script deploy-suite silentdata
 ```
@@ -139,19 +202,20 @@ EXPORT_PRIVATE_KEYS=true pnpm script deploy-suite
 If you encounter issues:
 
 1. Clean build artifacts:
-```bash
-pnpm clean
-```
+
+    ```bash
+    pnpm clean
+    ```
 
 2. Recompile contracts:
-```bash
-pnpm compile
-```
+
+    ```bash
+    pnpm compile
+    ```
 
 3. Verify environment configuration
 4. Check network connectivity
 5. Ensure sufficient funds for deployment
-
 
 ## Important Notes
 
