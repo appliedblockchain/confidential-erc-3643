@@ -6,7 +6,45 @@ pragma solidity ^0.8.17;
 import {Token} from "@tokenysolutions/t-rex/contracts/token/Token.sol";
 import {IIdentityRegistry} from "@tokenysolutions/t-rex/contracts/registry/interface/IIdentityRegistry.sol";
 
-contract UCEF3643 is Token {
+/**
+ * @dev Abstract contract that provides private event emission functionality
+ * This contract defines the PrivateEvent that can be used to emit private events
+ * with restricted visibility to specific addresses
+ */
+abstract contract PrivateEventEmitter {
+    /**
+     * @dev Emitted when a private event is logged
+     * @param allowedViewers Array of addresses authorized to view this event
+     * @param eventType The keccak256 hash of the original event signature
+     * @param payload ABI-encoded event arguments
+     */
+    event PrivateEvent(
+        address[] allowedViewers,
+        bytes32 indexed eventType,
+        bytes payload
+    );
+}
+
+contract UCEF3643 is Token, PrivateEventEmitter {
+
+    // ERC-3643 Original events keccak256 hashes
+    bytes32 public constant EVENT_TYPE_TRANSFER = keccak256("Transfer(address,address,uint256)");
+    bytes32 public constant EVENT_TYPE_APPROVAL = keccak256("Approval(address,address,uint256)");
+    bytes32 public constant EVENT_TYPE_TOKENS_FROZEN = keccak256("TokensFrozen(address,uint256)");
+    bytes32 public constant EVENT_TYPE_TOKENS_UNFROZEN = keccak256("TokensUnfrozen(address,uint256)");
+
+    // Auditor role management
+    address public auditor;
+    event AuditorChanged(address indexed previousAuditor, address indexed newAuditor);
+
+    /**
+     * @dev Sets the auditor address. Only callable by agents.
+     */
+    function setAuditor(address _auditor) external onlyAgent {
+        address previousAuditor = auditor;
+        auditor = _auditor;
+        emit AuditorChanged(previousAuditor, _auditor);
+    }
 
     /**
      * @dev Returns the balance of the specified account if authorized
@@ -91,7 +129,7 @@ contract UCEF3643 is Token {
     }
 
     /**
-     *  @dev ERC-3643 (v4.1.6) replacing `balanceOf` with `_balanceOf`; and emitting 0 amount on `TokensUnfrozen` event.
+     *  @dev ERC-3643 (v4.1.6) replacing `balanceOf` with `_balanceOf`; and emitting private TokensUnfrozen event.
      *  @dev See {IToken-forcedTransfer}.
      */
     function forcedTransfer(
@@ -104,7 +142,7 @@ contract UCEF3643 is Token {
         if (_amount > freeBalance) {
             uint256 tokensToUnfreeze = _amount - (freeBalance);
             _frozenTokens[_from] = _frozenTokens[_from] - (tokensToUnfreeze);
-            emit TokensUnfrozen(_from, 0);
+            _emitPrivateTokensUnfrozen(_from, tokensToUnfreeze);
         }
         if (_tokenIdentityRegistry.isVerified(_to)) {
             _transfer(_from, _to, _amount);
@@ -115,7 +153,7 @@ contract UCEF3643 is Token {
     }
 
     /**
-     *  @dev ERC-3643 (v4.1.6) replacing `balanceOf` with `_balanceOf`; and emitting zero amount on `TokensUnfrozen` event.
+     *  @dev ERC-3643 (v4.1.6) replacing `balanceOf` with `_balanceOf`; and emitting private TokensUnfrozen event.
      *  @dev See {IToken-burn}.
      */
     function burn(address _userAddress, uint256 _amount) public override onlyAgent {
@@ -124,31 +162,31 @@ contract UCEF3643 is Token {
         if (_amount > freeBalance) {
             uint256 tokensToUnfreeze = _amount - (freeBalance);
             _frozenTokens[_userAddress] = _frozenTokens[_userAddress] - (tokensToUnfreeze);
-            emit TokensUnfrozen(_userAddress, 0);
+            _emitPrivateTokensUnfrozen(_userAddress, tokensToUnfreeze);
         }
         _burn(_userAddress, _amount);
         _tokenCompliance.destroyed(_userAddress, _amount);
     }
 
     /**
-     *  @dev ERC-3643 (v4.1.6) replacing `balanceOf` with `_balanceOf`; and emitting zero amount on `TokensFrozen` event
+     *  @dev ERC-3643 (v4.1.6) replacing `balanceOf` with `_balanceOf`; and emitting private TokensFrozen event
      *  @dev See {IToken-freezePartialTokens}.
      */
     function freezePartialTokens(address _userAddress, uint256 _amount) public override onlyAgent {
         uint256 balance = _balanceOf(_userAddress);
         require(balance >= _frozenTokens[_userAddress] + _amount, "Amount exceeds available balance");
         _frozenTokens[_userAddress] = _frozenTokens[_userAddress] + (_amount);
-        emit TokensFrozen(_userAddress, 0);
+        _emitPrivateTokensFrozen(_userAddress, _amount);
     }
 
     /**
-     *   @dev ERC-3643 (v4.1.6) emitting zero amount on `TokensUnfrozen` event.
+     *   @dev ERC-3643 (v4.1.6) emitting private TokensUnfrozen event.
      *  @dev See {IToken-unfreezePartialTokens}.
      */
     function unfreezePartialTokens(address _userAddress, uint256 _amount) public override onlyAgent {
         require(_frozenTokens[_userAddress] >= _amount, "Amount should be less than or equal to frozen tokens");
         _frozenTokens[_userAddress] = _frozenTokens[_userAddress] - (_amount);
-        emit TokensUnfrozen(_userAddress, 0);
+        _emitPrivateTokensUnfrozen(_userAddress, _amount);
     }
 
     /**
@@ -160,7 +198,7 @@ contract UCEF3643 is Token {
     function _authorizeBalance(address account) internal view virtual returns (bool) {
         require(
             msg.sender == account || address(IIdentityRegistry(_tokenIdentityRegistry).identity(msg.sender)) == account, 
-            'Unauthorized balance access'
+            "Unauthorized balance access"
         );
         return true;
     }
@@ -189,7 +227,7 @@ contract UCEF3643 is Token {
 
         _balances[_from] = _balances[_from] - _amount;
         _balances[_to] = _balances[_to] + _amount;
-        emit Transfer(address(0), address(0), 0);
+        _emitPrivateTransfer(_from, _to, _amount);
     }
 
     /**
@@ -202,7 +240,7 @@ contract UCEF3643 is Token {
 
         _totalSupply = _totalSupply + _amount;
         _balances[_userAddress] = _balances[_userAddress] + _amount;
-        emit Transfer(address(0), address(0), 0);
+        _emitPrivateTransfer(address(0), _userAddress, _amount);
     }
 
     /**
@@ -215,7 +253,7 @@ contract UCEF3643 is Token {
 
         _balances[_userAddress] = _balances[_userAddress] - _amount;
         _totalSupply = _totalSupply - _amount;
-        emit Transfer(address(0), address(0), 0);
+        _emitPrivateTransfer(_userAddress, address(0), _amount);
     }
 
     /**
@@ -230,7 +268,7 @@ contract UCEF3643 is Token {
         require(_spender != address(0), "ERC20: approve to the zero address");
 
         _allowances[_owner][_spender] = _amount;
-        emit Approval(address(0), address(0), 0);
+        _emitPrivateApproval(_owner, _spender, _amount);
     }
 
     /**
@@ -238,5 +276,143 @@ contract UCEF3643 is Token {
      */
     function _allowance(address owner, address spender) internal view returns (uint256) {
         return _allowances[owner][spender];
+    }
+
+    /**
+     * @dev Internal function to emit private Transfer event
+     */
+    function _emitPrivateTransfer(address _from, address _to, uint256 _amount) internal {
+        // Calculate exact size needed
+        uint256 allowedViewersSize = 0;
+        if (_from != address(0)) allowedViewersSize++;
+        if (_to != address(0)) allowedViewersSize++;
+        if (auditor != address(0)) allowedViewersSize++;
+        
+        // Create array with exact size
+        address[] memory allowedViewers = new address[](allowedViewersSize);
+        uint256 index = 0;
+        
+        // Add from address if not zero
+        if (_from != address(0)) {
+            allowedViewers[index] = _from;
+            index++;
+        }
+        
+        // Add to address if not zero
+        if (_to != address(0)) {
+            allowedViewers[index] = _to;
+            index++;
+        }
+        
+        // Add auditor if set
+        if (auditor != address(0)) {
+            allowedViewers[index] = auditor;
+        }
+        
+        emit PrivateEvent(
+            allowedViewers,
+            EVENT_TYPE_TRANSFER,
+            abi.encode(_from, _to, _amount)
+        );
+    }
+
+    /**
+     * @dev Internal function to emit private Approval event
+     */
+    function _emitPrivateApproval(address _owner, address _spender, uint256 _amount) internal {
+        // Calculate exact size needed
+        uint256 allowedViewersSize = 0;
+        if (_owner != address(0)) allowedViewersSize++;
+        if (_spender != address(0)) allowedViewersSize++;
+        if (auditor != address(0)) allowedViewersSize++;
+        
+        // Create array with exact size
+        address[] memory allowedViewers = new address[](allowedViewersSize);
+        uint256 index = 0;
+        
+        // Add owner if not zero
+        if (_owner != address(0)) {
+            allowedViewers[index] = _owner;
+            index++;
+        }
+        
+        // Add spender if not zero
+        if (_spender != address(0)) {
+            allowedViewers[index] = _spender;
+            index++;
+        }
+        
+        // Add auditor if set
+        if (auditor != address(0)) {
+            allowedViewers[index] = auditor;
+        }
+        
+        emit PrivateEvent(
+            allowedViewers,
+            EVENT_TYPE_APPROVAL,
+            abi.encode(_owner, _spender, _amount)
+        );
+    }
+
+    /**
+     * @dev Internal function to emit private TokensFrozen event
+     */
+    function _emitPrivateTokensFrozen(address _user, uint256 _amount) internal {
+        // Calculate exact size needed
+        uint256 allowedViewersSize = 0;
+        if (_user != address(0)) allowedViewersSize++;
+        if (auditor != address(0)) allowedViewersSize++;
+        
+        // Create array with exact size
+        address[] memory allowedViewers = new address[](allowedViewersSize);
+        uint256 index = 0;
+        
+        // Add user if not zero
+        if (_user != address(0)) {
+            allowedViewers[index] = _user;
+            index++;
+        }
+        
+        // Add auditor if set
+        if (auditor != address(0)) {
+            allowedViewers[index] = auditor;
+        }
+        
+        emit PrivateEvent(
+            allowedViewers,
+            EVENT_TYPE_TOKENS_FROZEN,
+            abi.encode(_user, _amount)
+        );
+    }
+
+    /**
+     * @dev Internal function to emit private TokensUnfrozen event
+     */
+    function _emitPrivateTokensUnfrozen(address _user, uint256 _amount) internal {
+        // Calculate exact size needed
+        uint256 allowedViewersSize = 0;
+        if (_user != address(0)) allowedViewersSize++;
+        if (auditor != address(0)) allowedViewersSize++;
+        
+        // Create array with exact size
+        address[] memory allowedViewers = new address[](allowedViewersSize);
+        uint256 index = 0;
+        
+        // Add user if not zero
+        if (_user != address(0)) {
+            allowedViewers[index] = _user;
+            index++;
+        }
+        
+        // Add auditor if set
+        if (auditor != address(0)) {
+            allowedViewers[index] = auditor;
+        }
+        
+        emit PrivateEvent(
+            allowedViewers,
+            EVENT_TYPE_TOKENS_UNFROZEN,
+            abi.encode(_user, _amount)
+        );
     }
 }
