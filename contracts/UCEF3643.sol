@@ -6,7 +6,122 @@ pragma solidity ^0.8.17;
 import {Token} from "@tokenysolutions/t-rex/contracts/token/Token.sol";
 import {IIdentityRegistry} from "@tokenysolutions/t-rex/contracts/registry/interface/IIdentityRegistry.sol";
 
-contract UCEF3643 is Token {
+/**
+ * @dev Abstract contract that provides private event emission functionality
+ * This contract defines the PrivateEvent that can be used to emit private events
+ * with restricted visibility to specific addresses
+ */
+abstract contract PrivateEventEmitter {
+    /**
+     * @dev Emitted when a private event is logged
+     * @param allowedViewers Array of addresses authorized to view this event
+     * @param eventType The keccak256 hash of the original event signature
+     * @param payload ABI-encoded event arguments
+     */
+    event PrivateEvent(
+        address[] allowedViewers,
+        bytes32 indexed eventType,
+        bytes payload
+    );
+}
+
+contract UCEF3643 is Token, PrivateEventEmitter {
+
+    // ERC-3643 Original events keccak256 hashes
+    bytes32 public constant EVENT_TYPE_TRANSFER = keccak256("Transfer(address,address,uint256)");
+    bytes32 public constant EVENT_TYPE_APPROVAL = keccak256("Approval(address,address,uint256)");
+    bytes32 public constant EVENT_TYPE_TOKENS_FROZEN = keccak256("TokensFrozen(address,uint256)");
+    bytes32 public constant EVENT_TYPE_TOKENS_UNFROZEN = keccak256("TokensUnfrozen(address,uint256)");
+
+    /**
+     * @dev Auditor role management
+     * 
+     * Auditors are authorized addresses that receive access to view all private events
+     * emitted by this contract. They serve as compliance observers who can monitor
+     * token activities while maintaining user privacy from unauthorized parties.
+     * 
+     * Only the transaction participants and designated auditors can view these events,
+     * enabling regulatory oversight without compromising general privacy.
+     * 
+     * Agents can add/remove auditors as needed for compliance requirements.
+     */
+    mapping(address => bool) private _isAuditor;
+    mapping(address => uint256) private auditorIndex; // 1-based indexing (0 = not an auditor)
+    address[] private auditors;
+
+    event AuditorAdded(address indexed _auditor);
+    event AuditorRemoved(address indexed _auditor);
+
+    function addAuditor(address account) external onlyAgent {
+        require(account != address(0), "Invalid address");
+        require(!_isAuditor[account], "Auditor already added");
+
+        _isAuditor[account] = true;
+        auditors.push(account);
+        auditorIndex[account] = auditors.length; // Store 1-based index
+        emit AuditorAdded(account);
+    }
+
+    function removeAuditor(address account) external onlyAgent {
+        require(account != address(0), "Invalid address");
+        require(_isAuditor[account], "Auditor not found");
+
+        uint256 index = auditorIndex[account] - 1; // Convert to 0-based
+        uint256 lastIndex = auditors.length - 1;
+        
+        // Move last element to deleted spot (if not already last)
+        if (index != lastIndex) {
+            address lastAuditor = auditors[lastIndex];
+            auditors[index] = lastAuditor;
+            auditorIndex[lastAuditor] = index + 1; // Update moved element's index
+        }
+        
+        // Clean up
+        auditors.pop();
+        delete _isAuditor[account];
+        delete auditorIndex[account];
+        
+        emit AuditorRemoved(account);
+    }
+
+    function getAuditors() external view returns (address[] memory) {
+        return auditors;
+    }
+
+    function auditorCount() external view returns (uint256) {
+        return auditors.length;
+    }
+
+    /**
+     * @dev Replaces all current auditors with a new set of auditors
+     * This function atomically removes all existing auditors and adds the new ones.
+     * Useful for initial setup, bulk updates, or emergency auditor replacement.
+     * 
+     * @param newAuditors Array of new auditor addresses to set
+     */
+    function setAuditors(address[] calldata newAuditors) external onlyAgent {
+        // Remove all current auditors
+        for (uint256 i = 0; i < auditors.length; i++) {
+            address auditor = auditors[i];
+            _isAuditor[auditor] = false;
+            delete auditorIndex[auditor];
+            emit AuditorRemoved(auditor);
+        }
+
+        delete auditors;
+
+        // Add new auditors
+        for (uint256 i = 0; i < newAuditors.length; i++) {
+            address auditor = newAuditors[i];
+            require(auditor != address(0), "Zero address not allowed");
+            require(!_isAuditor[auditor], "Duplicate auditor");
+
+            _isAuditor[auditor] = true;
+            auditors.push(auditor);
+            auditorIndex[auditor] = auditors.length;
+            emit AuditorAdded(auditor);
+        }
+    }
 
     /**
      * @dev Returns the balance of the specified account if authorized
@@ -91,7 +206,7 @@ contract UCEF3643 is Token {
     }
 
     /**
-     *  @dev ERC-3643 (v4.1.6) replacing `balanceOf` with `_balanceOf`; and emitting 0 amount on `TokensUnfrozen` event.
+     *  @dev ERC-3643 (v4.1.6) replacing `balanceOf` with `_balanceOf`; and emitting private TokensUnfrozen event.
      *  @dev See {IToken-forcedTransfer}.
      */
     function forcedTransfer(
@@ -104,7 +219,7 @@ contract UCEF3643 is Token {
         if (_amount > freeBalance) {
             uint256 tokensToUnfreeze = _amount - (freeBalance);
             _frozenTokens[_from] = _frozenTokens[_from] - (tokensToUnfreeze);
-            emit TokensUnfrozen(_from, 0);
+            _emitPrivateTokensUnfrozen(_from, tokensToUnfreeze);
         }
         if (_tokenIdentityRegistry.isVerified(_to)) {
             _transfer(_from, _to, _amount);
@@ -115,7 +230,7 @@ contract UCEF3643 is Token {
     }
 
     /**
-     *  @dev ERC-3643 (v4.1.6) replacing `balanceOf` with `_balanceOf`; and emitting zero amount on `TokensUnfrozen` event.
+     *  @dev ERC-3643 (v4.1.6) replacing `balanceOf` with `_balanceOf`; and emitting private TokensUnfrozen event.
      *  @dev See {IToken-burn}.
      */
     function burn(address _userAddress, uint256 _amount) public override onlyAgent {
@@ -124,31 +239,31 @@ contract UCEF3643 is Token {
         if (_amount > freeBalance) {
             uint256 tokensToUnfreeze = _amount - (freeBalance);
             _frozenTokens[_userAddress] = _frozenTokens[_userAddress] - (tokensToUnfreeze);
-            emit TokensUnfrozen(_userAddress, 0);
+            _emitPrivateTokensUnfrozen(_userAddress, tokensToUnfreeze);
         }
         _burn(_userAddress, _amount);
         _tokenCompliance.destroyed(_userAddress, _amount);
     }
 
     /**
-     *  @dev ERC-3643 (v4.1.6) replacing `balanceOf` with `_balanceOf`; and emitting zero amount on `TokensFrozen` event
+     *  @dev ERC-3643 (v4.1.6) replacing `balanceOf` with `_balanceOf`; and emitting private TokensFrozen event
      *  @dev See {IToken-freezePartialTokens}.
      */
     function freezePartialTokens(address _userAddress, uint256 _amount) public override onlyAgent {
         uint256 balance = _balanceOf(_userAddress);
         require(balance >= _frozenTokens[_userAddress] + _amount, "Amount exceeds available balance");
         _frozenTokens[_userAddress] = _frozenTokens[_userAddress] + (_amount);
-        emit TokensFrozen(_userAddress, 0);
+        _emitPrivateTokensFrozen(_userAddress, _amount);
     }
 
     /**
-     *   @dev ERC-3643 (v4.1.6) emitting zero amount on `TokensUnfrozen` event.
+     *   @dev ERC-3643 (v4.1.6) emitting private TokensUnfrozen event.
      *  @dev See {IToken-unfreezePartialTokens}.
      */
     function unfreezePartialTokens(address _userAddress, uint256 _amount) public override onlyAgent {
         require(_frozenTokens[_userAddress] >= _amount, "Amount should be less than or equal to frozen tokens");
         _frozenTokens[_userAddress] = _frozenTokens[_userAddress] - (_amount);
-        emit TokensUnfrozen(_userAddress, 0);
+        _emitPrivateTokensUnfrozen(_userAddress, _amount);
     }
 
     /**
@@ -160,7 +275,7 @@ contract UCEF3643 is Token {
     function _authorizeBalance(address account) internal view virtual returns (bool) {
         require(
             msg.sender == account || address(IIdentityRegistry(_tokenIdentityRegistry).identity(msg.sender)) == account, 
-            'Unauthorized balance access'
+            "Unauthorized balance access"
         );
         return true;
     }
@@ -189,7 +304,7 @@ contract UCEF3643 is Token {
 
         _balances[_from] = _balances[_from] - _amount;
         _balances[_to] = _balances[_to] + _amount;
-        emit Transfer(address(0), address(0), 0);
+        _emitPrivateTransfer(_from, _to, _amount);
     }
 
     /**
@@ -202,7 +317,7 @@ contract UCEF3643 is Token {
 
         _totalSupply = _totalSupply + _amount;
         _balances[_userAddress] = _balances[_userAddress] + _amount;
-        emit Transfer(address(0), address(0), 0);
+        _emitPrivateTransfer(address(0), _userAddress, _amount);
     }
 
     /**
@@ -215,7 +330,7 @@ contract UCEF3643 is Token {
 
         _balances[_userAddress] = _balances[_userAddress] - _amount;
         _totalSupply = _totalSupply - _amount;
-        emit Transfer(address(0), address(0), 0);
+        _emitPrivateTransfer(_userAddress, address(0), _amount);
     }
 
     /**
@@ -230,7 +345,7 @@ contract UCEF3643 is Token {
         require(_spender != address(0), "ERC20: approve to the zero address");
 
         _allowances[_owner][_spender] = _amount;
-        emit Approval(address(0), address(0), 0);
+        _emitPrivateApproval(_owner, _spender, _amount);
     }
 
     /**
@@ -238,5 +353,90 @@ contract UCEF3643 is Token {
      */
     function _allowance(address owner, address spender) internal view returns (uint256) {
         return _allowances[owner][spender];
+    }
+
+    /**
+     * @dev Internal helper function to build the allowed viewers array for private events
+     * 
+     * This function combines event participants with all current auditors to create
+     * the complete list of addresses authorized to view a private event.
+     * 
+     * @param extra Array of participant addresses (e.g., from, to, user addresses)
+     *              May contain zero addresses which will be filtered out
+     * @return address[] Complete array of allowed viewers including participants and auditors
+     */
+    function _buildAllowedViewers(address[] memory extra) internal view returns (address[] memory) {
+        uint256 count = auditors.length;
+        for (uint256 i = 0; i < extra.length; i++) {
+            if (extra[i] != address(0)) {
+                count++;
+            }
+        }
+
+        // Create array with exact size needed
+        address[] memory allowedViewers = new address[](count);
+        uint256 index = 0;
+
+        // Add non-zero extra addresses
+        for (uint256 i = 0; i < extra.length; i++) {
+            if (extra[i] != address(0)) {
+                allowedViewers[index++] = extra[i];
+            }
+        }
+
+        // Add auditors
+        for (uint256 i = 0; i < auditors.length; i++) {
+            allowedViewers[index++] = auditors[i];
+        }
+
+        return allowedViewers;
+    }
+
+    /**
+     * @dev Generic internal function to emit private events
+     * @param eventType The keccak256 hash of the original event signature
+     * @param payload ABI-encoded event arguments
+     * @param participants Array of participant addresses for this specific event
+     */
+    function _emitPrivate(bytes32 eventType, bytes memory payload, address[] memory participants) internal {
+        emit PrivateEvent(_buildAllowedViewers(participants), eventType, payload);
+    }
+
+    /**
+     * @dev Internal function to emit private Transfer event
+     */
+    function _emitPrivateTransfer(address _from, address _to, uint256 _amount) internal {
+        address[] memory participants = new address[](2);
+        participants[0] = _from;
+        participants[1] = _to;
+        _emitPrivate(EVENT_TYPE_TRANSFER, abi.encode(_from, _to, _amount), participants);
+    }
+
+    /**
+     * @dev Internal function to emit private Approval event
+     */
+    function _emitPrivateApproval(address _owner, address _spender, uint256 _amount) internal {
+        address[] memory participants = new address[](2);
+        participants[0] = _owner;
+        participants[1] = _spender;
+        _emitPrivate(EVENT_TYPE_APPROVAL, abi.encode(_owner, _spender, _amount), participants);
+    }
+
+    /**
+     * @dev Internal function to emit private TokensFrozen event
+     */
+    function _emitPrivateTokensFrozen(address _user, uint256 _amount) internal {
+        address[] memory participants = new address[](1);
+        participants[0] = _user;
+        _emitPrivate(EVENT_TYPE_TOKENS_FROZEN, abi.encode(_user, _amount), participants);
+    }
+
+    /**
+     * @dev Internal function to emit private TokensUnfrozen event
+     */
+    function _emitPrivateTokensUnfrozen(address _user, uint256 _amount) internal {
+        address[] memory participants = new address[](1);
+        participants[0] = _user;
+        _emitPrivate(EVENT_TYPE_TOKENS_UNFROZEN, abi.encode(_user, _amount), participants);
     }
 }
