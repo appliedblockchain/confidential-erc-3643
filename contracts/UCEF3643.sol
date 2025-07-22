@@ -366,11 +366,18 @@ contract UCEF3643 is Token, PrivateEventEmitter {
      * @return address[] Complete array of allowed viewers including participants and auditors
      */
     function _buildAllowedViewers(address[] memory extra) internal view returns (address[] memory) {
-        uint256 totalLength = auditors.length + extra.length;
-        address[] memory allowedViewers = new address[](totalLength);
+        uint256 count = auditors.length;
+        for (uint256 i = 0; i < extra.length; i++) {
+            if (extra[i] != address(0)) {
+                count++;
+            }
+        }
+
+        // Create array with exact size needed
+        address[] memory allowedViewers = new address[](count);
         uint256 index = 0;
 
-        // Add dynamic extra addresses
+        // Add non-zero extra addresses
         for (uint256 i = 0; i < extra.length; i++) {
             if (extra[i] != address(0)) {
                 allowedViewers[index++] = extra[i];
@@ -380,13 +387,6 @@ contract UCEF3643 is Token, PrivateEventEmitter {
         // Add auditors
         for (uint256 i = 0; i < auditors.length; i++) {
             allowedViewers[index++] = auditors[i];
-        }
-
-        // If some entries were skipped due to being zero, truncate the array (optional)
-        if (index < totalLength) {
-            assembly {
-                mstore(allowedViewers, index)
-            }
         }
 
         return allowedViewers;
