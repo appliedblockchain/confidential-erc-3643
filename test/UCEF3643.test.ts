@@ -638,4 +638,394 @@ describe('UCEF3643', function () {
       })
     })
   })
+
+  describe('Auditor Management', function () {
+    let auditor1: Signer
+    let auditor2: Signer
+    let auditor1Address: string
+    let auditor2Address: string
+
+    beforeEach(async function () {
+      // Get additional signers for auditors
+      const signers = await ethers.getSigners()
+      auditor1 = signers[4]
+      auditor2 = signers[5]
+      auditor1Address = await auditor1.getAddress()
+      auditor2Address = await auditor2.getAddress()
+    })
+
+    describe('Adding Auditors', function () {
+      it('Should allow agent to add auditor', async function () {
+        await token.connect(agent).addAuditor(auditor1Address)
+        
+        const auditors = await token.getAuditors()
+        expect(auditors).to.include(auditor1Address)
+        expect(await token.auditorCount()).to.equal(1)
+      })
+
+      it('Should emit AuditorAdded event', async function () {
+        await expect(token.connect(agent).addAuditor(auditor1Address))
+          .to.emit(token, 'AuditorAdded')
+          .withArgs(auditor1Address)
+      })
+
+      it('Should allow adding multiple auditors', async function () {
+        await token.connect(agent).addAuditor(auditor1Address)
+        await token.connect(agent).addAuditor(auditor2Address)
+        
+        const auditors = await token.getAuditors()
+        expect(auditors).to.include(auditor1Address)
+        expect(auditors).to.include(auditor2Address)
+        expect(await token.auditorCount()).to.equal(2)
+      })
+
+      it('Should revert if caller is not agent', async function () {
+        await expect(token.connect(addr1).addAuditor(auditor1Address))
+          .to.be.revertedWith('AgentRole: caller does not have the Agent role')
+      })
+
+      it('Should revert when adding zero address', async function () {
+        await expect(token.connect(agent).addAuditor(ethers.ZeroAddress))
+          .to.be.revertedWith('Invalid address')
+      })
+
+      it('Should revert when adding duplicate auditor', async function () {
+        await token.connect(agent).addAuditor(auditor1Address)
+        await expect(token.connect(agent).addAuditor(auditor1Address))
+          .to.be.revertedWith('Auditor already added')
+      })
+    })
+
+    describe('Removing Auditors', function () {
+      beforeEach(async function () {
+        // Add auditors for removal tests
+        await token.connect(agent).addAuditor(auditor1Address)
+        await token.connect(agent).addAuditor(auditor2Address)
+      })
+
+      it('Should allow agent to remove auditor', async function () {
+        await token.connect(agent).removeAuditor(auditor1Address)
+        
+        const auditors = await token.getAuditors()
+        expect(auditors).not.to.include(auditor1Address)
+        expect(auditors).to.include(auditor2Address)
+        expect(await token.auditorCount()).to.equal(1)
+      })
+
+      it('Should emit AuditorRemoved event', async function () {
+        await expect(token.connect(agent).removeAuditor(auditor1Address))
+          .to.emit(token, 'AuditorRemoved')
+          .withArgs(auditor1Address)
+      })
+
+      it('Should handle removing last auditor', async function () {
+        await token.connect(agent).removeAuditor(auditor1Address)
+        await token.connect(agent).removeAuditor(auditor2Address)
+        
+        const auditors = await token.getAuditors()
+        expect(auditors.length).to.equal(0)
+        expect(await token.auditorCount()).to.equal(0)
+      })
+
+      it('Should revert if caller is not agent', async function () {
+        await expect(token.connect(addr1).removeAuditor(auditor1Address))
+          .to.be.revertedWith('AgentRole: caller does not have the Agent role')
+      })
+
+      it('Should revert when removing zero address', async function () {
+        await expect(token.connect(agent).removeAuditor(ethers.ZeroAddress))
+          .to.be.revertedWith('Invalid address')
+      })
+
+      it('Should revert when removing non-existent auditor', async function () {
+        const nonExistentAddress = await addr2.getAddress()
+        await expect(token.connect(agent).removeAuditor(nonExistentAddress))
+          .to.be.revertedWith('Auditor not found')
+      })
+    })
+
+    describe('Bulk Auditor Management', function () {
+      describe('setAuditors', function () {
+        it('Should allow agent to set initial auditors', async function () {
+          const newAuditors = [auditor1Address, auditor2Address]
+          
+          await expect(token.connect(agent).setAuditors(newAuditors))
+            .to.emit(token, 'AuditorAdded').withArgs(auditor1Address)
+            .and.to.emit(token, 'AuditorAdded').withArgs(auditor2Address)
+          
+          const currentAuditors = await token.getAuditors()
+          expect(currentAuditors).to.deep.equal(newAuditors)
+          expect(await token.auditorCount()).to.equal(2)
+        })
+
+        it('Should allow agent to replace existing auditors', async function () {
+          // First, add some auditors
+          await token.connect(agent).addAuditor(auditor1Address)
+          await token.connect(agent).addAuditor(auditor2Address)
+          expect(await token.auditorCount()).to.equal(2)
+          
+          // Then replace with new set
+          const newAuditors = [addr1Address, addr2Address]
+          
+          await expect(token.connect(agent).setAuditors(newAuditors))
+            .to.emit(token, 'AuditorRemoved').withArgs(auditor1Address)
+            .and.to.emit(token, 'AuditorRemoved').withArgs(auditor2Address)
+            .and.to.emit(token, 'AuditorAdded').withArgs(addr1Address)
+            .and.to.emit(token, 'AuditorAdded').withArgs(addr2Address)
+          
+          const currentAuditors = await token.getAuditors()
+          expect(currentAuditors).to.deep.equal(newAuditors)
+          expect(await token.auditorCount()).to.equal(2)
+        })
+
+        it('Should allow agent to clear all auditors', async function () {
+          // First, add some auditors
+          await token.connect(agent).addAuditor(auditor1Address)
+          await token.connect(agent).addAuditor(auditor2Address)
+          expect(await token.auditorCount()).to.equal(2)
+          
+          // Then clear all
+          await expect(token.connect(agent).setAuditors([]))
+            .to.emit(token, 'AuditorRemoved').withArgs(auditor1Address)
+            .and.to.emit(token, 'AuditorRemoved').withArgs(auditor2Address)
+          
+          const currentAuditors = await token.getAuditors()
+          expect(currentAuditors).to.have.length(0)
+          expect(await token.auditorCount()).to.equal(0)
+        })
+
+        it('Should handle setting same auditors (idempotent when no existing auditors)', async function () {
+          const newAuditors = [auditor1Address, auditor2Address]
+          
+          // Set auditors first time
+          await token.connect(agent).setAuditors(newAuditors)
+          expect(await token.auditorCount()).to.equal(2)
+          
+          // Set same auditors again (after clearing in process)
+          await expect(token.connect(agent).setAuditors(newAuditors))
+            .to.emit(token, 'AuditorRemoved').withArgs(auditor1Address)
+            .and.to.emit(token, 'AuditorRemoved').withArgs(auditor2Address)
+            .and.to.emit(token, 'AuditorAdded').withArgs(auditor1Address)
+            .and.to.emit(token, 'AuditorAdded').withArgs(auditor2Address)
+          
+          const currentAuditors = await token.getAuditors()
+          expect(currentAuditors).to.deep.equal(newAuditors)
+          expect(await token.auditorCount()).to.equal(2)
+        })
+
+        it('Should revert if caller is not agent', async function () {
+          const newAuditors = [auditor1Address]
+          
+          await expect(token.connect(owner).setAuditors(newAuditors))
+            .to.be.revertedWith('AgentRole: caller does not have the Agent role')
+          
+          await expect(token.connect(addr1).setAuditors(newAuditors))
+            .to.be.revertedWith('AgentRole: caller does not have the Agent role')
+        })
+
+        it('Should revert when trying to set zero address', async function () {
+          const newAuditors = [auditor1Address, ethers.ZeroAddress, auditor2Address]
+          
+          await expect(token.connect(agent).setAuditors(newAuditors))
+            .to.be.revertedWith('Zero address not allowed')
+        })
+
+        it('Should revert when trying to set duplicate auditors', async function () {
+          const newAuditors = [auditor1Address, auditor2Address, auditor1Address]
+          
+          await expect(token.connect(agent).setAuditors(newAuditors))
+            .to.be.revertedWith('Duplicate auditor')
+        })
+
+        it('Should work with single auditor', async function () {
+          const newAuditors = [auditor1Address]
+          
+          await expect(token.connect(agent).setAuditors(newAuditors))
+            .to.emit(token, 'AuditorAdded').withArgs(auditor1Address)
+          
+          const currentAuditors = await token.getAuditors()
+          expect(currentAuditors).to.deep.equal(newAuditors)
+          expect(await token.auditorCount()).to.equal(1)
+        })
+
+        it('Should properly clean up state when replacing auditors', async function () {
+          // Add initial auditors using individual function
+          await token.connect(agent).addAuditor(auditor1Address)
+          await token.connect(agent).addAuditor(auditor2Address)
+          
+          // Verify initial state
+          expect(await token.auditorCount()).to.equal(2)
+          
+          // Replace with completely different set
+          const newAuditors = [addr1Address]
+          await token.connect(agent).setAuditors(newAuditors)
+          
+          // Verify final state
+          expect(await token.auditorCount()).to.equal(1)
+          const currentAuditors = await token.getAuditors()
+          expect(currentAuditors).to.deep.equal(newAuditors)
+          
+          // Verify old auditors are properly cleaned up by trying to add them again
+          await expect(token.connect(agent).addAuditor(auditor1Address))
+            .to.emit(token, 'AuditorAdded').withArgs(auditor1Address)
+          
+          expect(await token.auditorCount()).to.equal(2)
+        })
+      })
+    })
+
+    describe('Auditor Integration with Private Events', function () {
+      beforeEach(async function () {
+        // Set up for testing private events with auditors
+        await mockIdentityRegistry.registerIdentity(addr1Address, 1, true)
+        await mockIdentityRegistry.registerIdentity(addr2Address, 1, true)
+        await mockCompliance.setCanTransfer(addr1Address, true)
+        await mockCompliance.setCanTransfer(addr2Address, true)
+        
+        // Add auditors
+        await token.connect(agent).addAuditor(auditor1Address)
+        await token.connect(agent).addAuditor(auditor2Address)
+        
+        // Mint tokens for testing
+        await token.connect(agent).mint(addr1Address, ethers.parseEther('1000'))
+      })
+
+      it('Should include auditors in transfer private events', async function () {
+        const transferAmount = ethers.parseEther('100')
+        
+        // Capture the transaction
+        const tx = await token.connect(addr1).transfer(addr2Address, transferAmount)
+        const receipt = await tx.wait()
+        
+        // Find the PrivateEvent
+        const privateEvent = receipt?.logs.find(log => {
+          try {
+            const parsed = token.interface.parseLog({ topics: log.topics as string[], data: log.data })
+            return parsed?.name === 'PrivateEvent'
+          } catch {
+            return false
+          }
+        })
+        
+        expect(privateEvent).to.not.be.undefined
+        
+        if (privateEvent) {
+          const parsed = token.interface.parseLog({ topics: privateEvent.topics as string[], data: privateEvent.data })
+          const allowedViewers = parsed?.args[0] as string[]
+          
+          // Should include both participants and auditors
+          expect(allowedViewers).to.include(addr1Address) // from
+          expect(allowedViewers).to.include(addr2Address) // to
+          expect(allowedViewers).to.include(auditor1Address) // auditor 1
+          expect(allowedViewers).to.include(auditor2Address) // auditor 2
+          expect(allowedViewers.length).to.equal(4) // 2 participants + 2 auditors
+        }
+      })
+
+      it('Should include auditors in token freezing private events', async function () {
+        const freezeAmount = ethers.parseEther('50')
+        
+        // Capture the transaction
+        const tx = await token.connect(agent).freezePartialTokens(addr1Address, freezeAmount)
+        const receipt = await tx.wait()
+        
+        // Find the PrivateEvent
+        const privateEvent = receipt?.logs.find(log => {
+          try {
+            const parsed = token.interface.parseLog({ topics: log.topics as string[], data: log.data })
+            return parsed?.name === 'PrivateEvent'
+          } catch {
+            return false
+          }
+        })
+        
+        expect(privateEvent).to.not.be.undefined
+        
+        if (privateEvent) {
+          const parsed = token.interface.parseLog({ topics: privateEvent.topics as string[], data: privateEvent.data })
+          const allowedViewers = parsed?.args[0] as string[]
+          
+          // Should include user and auditors
+          expect(allowedViewers).to.include(addr1Address) // user
+          expect(allowedViewers).to.include(auditor1Address) // auditor 1
+          expect(allowedViewers).to.include(auditor2Address) // auditor 2
+          expect(allowedViewers.length).to.equal(3) // 1 user + 2 auditors
+        }
+      })
+
+      it('Should work with no auditors', async function () {
+        // Remove all auditors
+        await token.connect(agent).removeAuditor(auditor1Address)
+        await token.connect(agent).removeAuditor(auditor2Address)
+        
+        const transferAmount = ethers.parseEther('100')
+        
+        // Capture the transaction
+        const tx = await token.connect(addr1).transfer(addr2Address, transferAmount)
+        const receipt = await tx.wait()
+        
+        // Find the PrivateEvent
+        const privateEvent = receipt?.logs.find(log => {
+          try {
+            const parsed = token.interface.parseLog({ topics: log.topics as string[], data: log.data })
+            return parsed?.name === 'PrivateEvent'
+          } catch {
+            return false
+          }
+        })
+        
+        expect(privateEvent).to.not.be.undefined
+        
+        if (privateEvent) {
+          const parsed = token.interface.parseLog({ topics: privateEvent.topics as string[], data: privateEvent.data })
+          const allowedViewers = parsed?.args[0] as string[]
+          
+          // Should only include participants, no auditors
+          expect(allowedViewers).to.include(addr1Address) // from
+          expect(allowedViewers).to.include(addr2Address) // to
+          expect(allowedViewers.length).to.equal(2) // only 2 participants, no auditors
+        }
+        
+        expect(await token.auditorCount()).to.equal(0)
+      })
+    })
+
+    describe('Edge Cases', function () {
+      it('Should handle adding and removing same auditor multiple times', async function () {
+        // Add auditor
+        await token.connect(agent).addAuditor(auditor1Address)
+        expect(await token.auditorCount()).to.equal(1)
+        
+        // Remove auditor
+        await token.connect(agent).removeAuditor(auditor1Address)
+        expect(await token.auditorCount()).to.equal(0)
+        
+        // Add same auditor again
+        await token.connect(agent).addAuditor(auditor1Address)
+        expect(await token.auditorCount()).to.equal(1)
+        
+        const auditors = await token.getAuditors()
+        expect(auditors).to.include(auditor1Address)
+      })
+
+      it('Should maintain correct order when removing from middle', async function () {
+        const signers = await ethers.getSigners()
+        const auditor3Address = await signers[6].getAddress()
+        
+        // Add three auditors
+        await token.connect(agent).addAuditor(auditor1Address)
+        await token.connect(agent).addAuditor(auditor2Address)
+        await token.connect(agent).addAuditor(auditor3Address)
+        
+        // Remove middle auditor
+        await token.connect(agent).removeAuditor(auditor2Address)
+        
+        const auditors = await token.getAuditors()
+        expect(auditors.length).to.equal(2)
+        expect(auditors).to.include(auditor1Address)
+        expect(auditors).to.include(auditor3Address)
+        expect(auditors).not.to.include(auditor2Address)
+      })
+    })
+  })
 })
