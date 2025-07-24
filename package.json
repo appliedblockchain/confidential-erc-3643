@@ -38,9 +38,9 @@
     "lint:fix": "pnpm lint --fix"
   },
   "devDependencies": {
-    "@appliedblockchain/silentdatarollup-core": "^1.0.1",
-    "@appliedblockchain/silentdatarollup-ethers-provider": "^1.0.1",
-    "@appliedblockchain/silentdatarollup-hardhat-plugin": "^1.0.1",
+    "@appliedblockchain/silentdatarollup-core": "^1.0.2",
+    "@appliedblockchain/silentdatarollup-ethers-provider": "^1.0.2",
+    "@appliedblockchain/silentdatarollup-hardhat-plugin": "^1.0.2",
     "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
     "@nomicfoundation/hardhat-ethers": "^3.0.0",
     "@nomicfoundation/hardhat-ignition": "^0.15.0",
