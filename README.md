@@ -75,7 +75,7 @@ This approach maintains full ERC-3643 compliance while adding programmable priva
 
 ## Prerequisites
 
-- Node.js (v14 or higher)
+- Node.js (v18.17 or higher)
 - pnpm (recommended)
 - Hardhat
 - Access to Silent Data credentials (for Silent Data deployment)

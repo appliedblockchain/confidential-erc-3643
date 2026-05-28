@@ -23,6 +23,10 @@
   ],
   "main": "index.js",
   "types": "index.d.ts",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "compile": "npx hardhat compile",
     "test": "npx hardhat test",
