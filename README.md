@@ -1,7 +1,7 @@
 > [!IMPORTANT]
 > **This repository has moved.** Development now continues in [appliedblockchain/ucef-contracts](https://github.com/appliedblockchain/ucef-contracts), which contains the content of both this repository and [confidential-erc-20](https://github.com/appliedblockchain/confidential-erc-20).
 > This repository is no longer maintained. Please open new issues and pull requests in [ucef-contracts](https://github.com/appliedblockchain/ucef-contracts).
-> The ERC-3643 contracts now live in [packages/ucef-3643](https://github.com/appliedblockchain/ucef-contracts/tree/main/packages/ucef-3643), published as `@appliedblockchain/ucef-3643`. See [UCEF3643.md](https://github.com/appliedblockchain/ucef-contracts/blob/main/UCEF3643.md) for details.
+> The contracts are now in the [`packages/`](https://github.com/appliedblockchain/ucef-contracts/tree/main/packages) folder of ucef-contracts.
 
 # Confidential ERC-3643 Token (UCEF3643)
 
